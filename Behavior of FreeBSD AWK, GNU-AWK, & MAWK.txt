@@ -1,0 +1,123 @@
+~ Behavior of FreeBSD AWK, GNU-AWK, & MAWK ~
+
+Note: So far, I've reading the re_format(7) on freebsd 11.1
+and the default awk (same as nawk on /usr/bin) doesn't support
+at least the 'bound' regex mentioned in that page.
+
+It mentions that a bound is something like [a-f]{2}  where
+{2} is the bound for matching exactly 2 matches for the range
+[a-f], that is supposed to match "aa", "af", "fd", etc.
+
+The bound doesn't work. an example is in order:
+
+echo "ff" | awk '/[a-f]{2}/'
+
+don't produces a match
+
+echo "ff" | gawk '/[a-f]{2}/' Does. using 'gawk'
+
+next input: echo "af{2}" | awk '/[a-f]\{2\|/' 
+produces:  af{2}
+which is normal since I'm escaping '{' and '}'
+
+That old syntax was abandoned a long time ago and I believe
+that is supported only by old 'sed' and 'grep' versions. Today
+most awks are POSIX based (with some extensions) and don't use
+the backslash to escape metacharacters.
+
+So what is happening? I will keep reading, and looking at the
+docs...
+
+~ Another issue ~
+
+'Bound Ranges', yes, let's see.
+
+echo "aaa" | awk '/[abcdef]{3,1}/'
+
+don't give a warning or 'anything' and returns 0 (EXIT_SUCCESS)
+Amazing.
+
+same input from the pipe and same pattern (no action since the
+default action is implied, which is print) with gawk
+
+echo "aaa" | gawk '/[abcdef]{3,1}/'
+
+gawk: cmd. line:1: error: Invalid content of \{\}: /[abcdef]{3,1}/
+
+gawk is doing 'the right thing'. the range is invalid and the error
+is thrown, returning 1 (EXIT_FAILURE)
+
+Also 'mawk' is clueless and it behaves exactly the same as awk.
+
+But re_format(7) says the following about bounds
+    "and if there are two of them, the first may not exceed
+     the second."
+
+the manual page for the freebsd 'awk' points to re_format(7) for
+learning about the regex rules, and this 'awk' implementation
+doesn't care at least about this, is there is a switch that
+activates the POSIX behavior?
+
+~ Bracket expression issue ~ ( 'awk' and 'mawk' )
+
+I don't really know if this is an issue, but the behavior here
+is at least strange:
+
+echo 'aa9' | awk '/[a-9]/' match "aa9"
+
+I'm assuming that both 'awk' and 'mawk' treat the a-9 something
+like a-z0-9? because with this latter range that obviously match
+on gawk.
+
+awk(1) doesn't include a reference for regexps, like I said for 
+reading about that ones needs to read re_format(7), and there
+everything is really clear, is it for this 'awk' implementation?
+
+Also put the locale to en_US.UTF-8 just in case but I get the same
+result from the matches.
+
+re_format(7) Also mentions
+
+  "It is ilegal for two ranges to share an endpoint, e.g. 'a-c-e'"
+
+Also says that ranges are collating-sequence-dependent, and that
+portable programs should avoid them. I understand by this that the
+order of the encoding of characters is not always the same, will
+look further into this.
+
+However, big surprise, the following works in 'mawk' and 'awk'
+
+echo "abc" | awk '/[a-c-e]/'
+
+It match, oh boy.
+
+gawk step up to the challenge and behaves
+
+echo "abc" | awk '/[a-c-e]/'
+gawk: cmd. line:1: error: Invalid range end: /[a-c-e/
+
+I will look straigh into the POSIX 1003.2 regular expressions
+sections to see what is really going on, wait....
+
+man awk shows that the awk on FreeBSD 11.1 
+
+    "The awk utility is compliant with the IEEE Std 1003.1-2008 
+     ("POSIX.1"), except 'awk' does not support {n,m} pattern
+     matching"
+
+Bingo. is all clear now. however, that doesn't explain the
+range behavior. Will look further into this.
+
+But, why in the same manpage there is a reference to re_format(7)
+and that manpage states
+  "re_format  - POSIX 1003.2 regular expressions"
+
+Seems that even if the reference re_format(7) from awk(1) is only for
+regex but in this case is not fully aligned with the POSIX specification
+for awk(1)
+
+Also seems that the best AWK Implementation is the GNU version.
+
+
+
+
